@@ -1,0 +1,25 @@
+# litellm_config.yaml
+# Routes OpenAI-style calls → Claude via Anthropic API
+# Start with: litellm --config litellm_config.yaml --port 4000
+
+model_list:
+  - model_name: claude-sonnet        # name PageIndex/app will use
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-haiku         # fast/cheap model for lighter tasks
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+litellm_settings:
+  drop_params: true          # drop unsupported OpenAI params silently
+  request_timeout: 120
+  num_retries: 3
+  fallbacks:
+    - claude-sonnet:
+        - claude-haiku
+
+general_settings:
+  master_key: sk-placeholder  # change in production, set as LITELLM_API_KEY

@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment / secrets — NEVER commit these
+.env
+state/.secret_key
+state/users.json
+
+# Runtime state (auto-generated)
+state/
+uploads/
+texts/
+indexes/
+logs/
+
+# Log files
+*.log
+pageindex_rag.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cookies (from curl tests)
+cookies.txt

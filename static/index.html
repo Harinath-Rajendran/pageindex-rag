@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PageIndex RAG</title>
+<style>
+  :root {
+    --bg:#0a0a0a;
+    --surface:#141414;
+    --surface2:#1e1e1e;
+    --surface3:#2a2a2a;
+    --border:rgba(255,255,255,0.06);
+    --border2:rgba(255,255,255,0.12);
+    --accent:#ff6b1a;
+    --accent-hover:#ff8537;
+    --accent-dim:rgba(255,107,26,0.12);
+    --accent-border:rgba(255,107,26,0.35);
+    --text:#f5f5f5;
+    --text2:#a0a0a0;
+    --text3:#6a6a6a;
+    --green:#4ade80;
+    --amber:#fbbf24;
+    --red:#ef4444;
+    --font:'Inter',system-ui,sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);
+    height:100vh;overflow:hidden}
+  .app{display:grid;grid-template-columns:300px 1fr;grid-template-rows:56px 1fr;height:100vh}
+  .hidden{display:none !important}
+
+  /* Login */
+  .login-wrap{height:100vh;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 30% 20%,rgba(255,107,26,0.08),transparent 60%),var(--bg)}
+  .login-card{background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:34px 32px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .login-logo{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:600;margin-bottom:4px}
+  .login-logo-icon{width:34px;height:34px;background:var(--accent);
+    border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;color:#000;font-weight:700}
+  .login-card h2{font-size:22px;font-weight:600;margin:16px 0 6px}
+  .login-card p{font-size:13px;color:var(--text2);margin-bottom:22px}
+  .login-field{margin-bottom:14px}
+  .login-field label{display:block;font-size:11px;font-weight:500;color:var(--text2);
+    text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+  .login-field input{width:100%;background:var(--bg);border:1px solid var(--border2);
+    color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px;
+    font-family:var(--font);outline:none;transition:border-color .15s}
+  .login-field input:focus{border-color:var(--accent)}
+  .login-btn{width:100%;background:var(--accent);color:#000;border:none;padding:11px;
+    border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:6px;
+    transition:background .15s}
+  .login-btn:hover{background:var(--accent-hover)}
+  .login-btn:disabled{background:var(--surface2);color:var(--text3);cursor:not-allowed}
+  .login-error{font-size:12px;color:var(--red);margin-top:10px;min-height:16px}
+  .login-hint{font-size:11px;color:var(--text3);text-align:center;margin-top:18px;line-height:1.6}
+
+  /* Header */
+  header{grid-column:1/-1;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 20px;gap:14px}
+  .logo{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;letter-spacing:.2px}
+  .logo-icon{width:28px;height:28px;background:var(--accent);
+    border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#000;font-weight:700}
+  .badge{font-size:10px;font-weight:600;background:var(--accent-dim);color:var(--accent);
+    border:1px solid var(--accent-border);padding:2px 7px;border-radius:20px;
+    text-transform:uppercase;letter-spacing:.5px}
+  .group-switcher{display:flex;align-items:center;gap:8px;margin-left:14px}
+  .group-switcher label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+  .group-switcher select{background:var(--surface2);border:1px solid var(--border2);
+    color:var(--text);padding:6px 10px;border-radius:8px;font-size:13px;font-family:var(--font);
+    cursor:pointer;outline:none}
+  .group-switcher select:focus{border-color:var(--accent)}
+  .header-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .llm-badge{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500;
+    background:rgba(74,222,128,0.08);color:var(--green);border:1px solid rgba(74,222,128,0.2)}
+  .llm-badge.ollama{background:rgba(251,191,36,0.08);color:var(--amber);border-color:rgba(251,191,36,0.2)}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--red);transition:background .3s}
+  .status-dot.ok{background:var(--green)}
+  .status-text{font-size:12px;color:var(--text2)}
+  .user-chip{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);
+    background:var(--surface2);border:1px solid var(--border);padding:4px 10px;border-radius:20px}
+  .user-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+  .icon-btn{background:none;border:1px solid var(--border2);color:var(--text2);
+    padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font);
+    display:inline-flex;align-items:center;gap:5px;font-weight:500}
+  .icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .icon-btn.danger:hover{border-color:var(--red);color:var(--red)}
+
+  /* Sidebar */
+  aside{background:var(--surface);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;overflow:hidden}
+  .sidebar-header{padding:14px 16px 10px;font-size:11px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.8px;color:var(--text3);
+    display:flex;align-items:center;justify-content:space-between}
+  .sidebar-header .count{color:var(--text2);font-weight:500}
+  .upload-zone{margin:6px 12px 12px;border:1.5px dashed var(--border2);border-radius:10px;
+    padding:18px 12px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+  .upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:var(--accent-dim)}
+  .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .upload-icon{font-size:22px;margin-bottom:6px;color:var(--accent)}
+  .upload-label{font-size:13px;font-weight:500;margin-bottom:2px}
+  .upload-hint{font-size:10px;color:var(--text3)}
+  .upload-target{font-size:10px;color:var(--accent);margin-top:6px;font-weight:600}
+  .upload-progress{margin:0 12px 10px;display:none}
+  .progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+  .progress-fill{height:100%;background:var(--accent);border-radius:2px;
+    transition:width .3s;width:0%;animation:shimmer 1.5s infinite}
+  @keyframes shimmer{0%,100%{opacity:1}50%{opacity:.6}}
+  .progress-label{font-size:11px;color:var(--text2);margin-top:5px}
+  .doc-list{flex:1;overflow-y:auto;padding:2px 8px 8px}
+  .doc-list::-webkit-scrollbar{width:4px}
+  .doc-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+  .doc-item{padding:9px 12px;border-radius:8px;transition:all .15s;
+    border:1px solid transparent;margin-bottom:3px;display:flex;align-items:center;gap:8px}
+  .doc-item:hover{background:var(--surface2)}
+  .doc-icon{font-size:18px;flex-shrink:0}
+  .doc-info{flex:1;min-width:0}
+  .doc-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+  .doc-meta{display:flex;align-items:center;gap:5px}
+  .doc-status{font-size:9px;font-weight:600;padding:1px 5px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px}
+  .doc-status.ready{background:rgba(74,222,128,0.12);color:var(--green)}
+  .doc-status.indexing{background:rgba(251,191,36,0.12);color:var(--amber)}
+  .doc-status.queued{background:rgba(255,107,26,0.12);color:var(--accent)}
+  .doc-status.error{background:rgba(239,68,68,0.12);color:var(--red)}
+  .doc-size{font-size:9px;color:var(--text3)}
+  .doc-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;
+    padding:2px 4px;border-radius:4px;opacity:0;transition:all .15s;flex-shrink:0}
+  .doc-item:hover .doc-del{opacity:1}
+  .doc-del:hover{color:var(--red);background:rgba(239,68,68,0.1)}
+  .empty-docs{text-align:center;padding:24px 12px;color:var(--text3);font-size:12px;line-height:1.6}
+
+  /* Main chat */
+  main{display:flex;flex-direction:column;overflow:hidden}
+  .chat-header{padding:12px 20px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:10px;background:var(--surface)}
+  .chat-title{font-size:14px;font-weight:600}
+  .chat-sub{font-size:11px;color:var(--text2)}
+  .messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+  .messages::-webkit-scrollbar{width:4px}
+  .messages::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+  .msg{display:flex;gap:10px;animation:fadeIn .25s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .msg.user{flex-direction:row-reverse}
+  .avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+  .avatar.ai{background:var(--accent);color:#000}
+  .avatar.user{background:var(--surface2);color:var(--text2);border:1px solid var(--border2)}
+  .bubble{max-width:78%;padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.65;word-wrap:break-word}
+  .msg.ai .bubble{background:var(--surface);border:1px solid var(--border);border-radius:4px 12px 12px 12px}
+  .msg.user .bubble{background:var(--accent-dim);border:1px solid var(--accent-border);
+    border-radius:12px 4px 12px 12px}
+  .routed-banner{font-size:11px;color:var(--text3);margin-bottom:8px;
+    display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .routed-banner .pill{background:var(--surface2);border:1px solid var(--border);
+    padding:2px 8px;border-radius:10px;color:var(--text2);font-size:10px}
+  .routed-banner .pill.accent{background:var(--accent-dim);color:var(--accent);border-color:var(--accent-border)}
+  .sources{margin-top:10px;border-top:1px solid var(--border);padding-top:9px}
+  .sources-toggle{background:none;border:none;color:var(--accent);font-size:12px;
+    cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;font-weight:500}
+  .sources-toggle:hover{color:var(--accent-hover)}
+  .sources-list{margin-top:7px;display:none}
+  .sources-list.open{display:block}
+  .source-group{margin-bottom:8px}
+  .source-doc{font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px;
+    display:flex;align-items:center;gap:5px}
+  .source-item{padding:6px 10px;background:rgba(255,255,255,0.02);
+    border:1px solid var(--border);border-radius:6px;margin-bottom:4px;font-size:11px}
+  .source-title{font-weight:500;color:var(--text);margin-bottom:2px}
+  .source-why{color:var(--text2)}
+  .typing{display:flex;gap:4px;align-items:center;padding:4px 0}
+  .typing span{width:6px;height:6px;border-radius:50%;background:var(--text3);animation:bounce 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.2s}
+  .typing span:nth-child(3){animation-delay:.4s}
+  @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
+  .input-area{padding:14px 20px;border-top:1px solid var(--border);background:var(--surface)}
+  .input-row{display:flex;gap:10px;align-items:flex-end;background:var(--bg);
+    border:1px solid var(--border2);border-radius:12px;padding:9px 13px;transition:border-color .2s}
+  .input-row:focus-within{border-color:var(--accent)}
+  #question{flex:1;background:none;border:none;outline:none;color:var(--text);
+    font-family:var(--font);font-size:14px;line-height:1.5;resize:none;max-height:120px;min-height:20px}
+  #question::placeholder{color:var(--text3)}
+  .send-btn{width:34px;height:34px;border-radius:8px;background:var(--accent);border:none;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;color:#000;
+    font-size:14px;flex-shrink:0;transition:all .15s;margin-bottom:1px;font-weight:700}
+  .send-btn:hover{background:var(--accent-hover);transform:scale(1.05)}
+  .send-btn:disabled{background:var(--surface2);color:var(--text3);cursor:not-allowed;transform:none}
+  .input-hint{font-size:10px;color:var(--text3);margin-top:6px}
+
+  /* Toast */
+  #toast{position:fixed;bottom:20px;right:20px;background:var(--surface2);
+    border:1px solid var(--border2);border-radius:10px;padding:11px 15px;font-size:13px;
+    color:var(--text);transform:translateY(70px);opacity:0;transition:all .3s;
+    z-index:999;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+  #toast.show{transform:translateY(0);opacity:1}
+  #toast.error{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.08)}
+  #toast.success{border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.06)}
+
+  /* Modal */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;z-index:900;
+    animation:fadeIn .2s ease}
+  .modal{background:var(--surface);border:1px solid var(--border2);border-radius:14px;
+    width:min(680px,92vw);max-height:86vh;display:flex;flex-direction:column;
+    box-shadow:0 24px 80px rgba(0,0,0,.6)}
+  .modal-head{padding:16px 22px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:10px}
+  .modal-head h3{font-size:16px;font-weight:600;flex:1}
+  .modal-close{background:none;border:none;color:var(--text3);font-size:22px;
+    cursor:pointer;padding:0 4px;line-height:1}
+  .modal-close:hover{color:var(--text)}
+  .modal-body{padding:22px;overflow-y:auto;flex:1}
+  .modal-body::-webkit-scrollbar{width:6px}
+  .modal-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+  .admin-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:20px}
+  .admin-tab{background:none;border:none;color:var(--text2);padding:10px 14px;cursor:pointer;
+    font-family:var(--font);font-size:13px;font-weight:500;border-bottom:2px solid transparent;
+    transition:all .15s}
+  .admin-tab:hover{color:var(--text)}
+  .admin-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .admin-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px;
+    padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px}
+  .admin-form .full{grid-column:1 / -1}
+  .admin-form label{display:block;font-size:11px;font-weight:600;color:var(--text2);
+    text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  .admin-form input[type=text],.admin-form input[type=password]{width:100%;background:var(--bg);
+    border:1px solid var(--border2);color:var(--text);padding:9px 11px;border-radius:7px;
+    font-size:13px;font-family:var(--font);outline:none}
+  .admin-form input:focus{border-color:var(--accent)}
+  .group-checks{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+  .group-check{display:inline-flex;align-items:center;gap:6px;background:var(--bg);
+    border:1px solid var(--border2);padding:6px 10px;border-radius:18px;cursor:pointer;
+    font-size:12px;user-select:none}
+  .group-check input{accent-color:var(--accent)}
+  .group-check:has(input:checked){border-color:var(--accent);background:var(--accent-dim);color:var(--accent)}
+  .admin-btn{background:var(--accent);color:#000;border:none;padding:9px 16px;border-radius:7px;
+    font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:background .15s}
+  .admin-btn:hover{background:var(--accent-hover)}
+  .admin-btn:disabled{background:var(--surface3);color:var(--text3);cursor:not-allowed}
+  .admin-btn.ghost{background:transparent;border:1px solid var(--border2);color:var(--text)}
+  .admin-btn.ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+  .admin-btn.danger{background:transparent;border:1px solid rgba(239,68,68,.4);color:var(--red)}
+  .admin-btn.danger:hover{background:rgba(239,68,68,.1)}
+  .users-table{width:100%;border-collapse:collapse;font-size:13px}
+  .users-table th{text-align:left;padding:10px 12px;color:var(--text3);font-weight:600;
+    font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+  .users-table td{padding:12px;border-bottom:1px solid var(--border);vertical-align:middle}
+  .users-table tr:hover td{background:var(--surface2)}
+  .user-groups-cell{display:flex;flex-wrap:wrap;gap:4px}
+  .gchip{background:var(--surface2);border:1px solid var(--border2);padding:2px 8px;
+    border-radius:10px;font-size:10px;font-weight:500;color:var(--text2)}
+  .gchip.admin{background:var(--accent-dim);color:var(--accent);border-color:var(--accent-border)}
+  .actions-cell{display:flex;gap:6px;justify-content:flex-end}
+  .form-error{grid-column:1/-1;color:var(--red);font-size:12px;min-height:16px}
+  .form-ok{grid-column:1/-1;color:var(--green);font-size:12px;min-height:16px}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginView" class="login-wrap hidden">
+  <div class="login-card">
+    <div class="login-logo"><div class="login-logo-icon">P</div>PageIndex RAG</div>
+    <h2>Sign in</h2>
+    <p>Access is scoped to workspaces you're assigned to.</p>
+    <form id="loginForm" onsubmit="doLogin(event)">
+      <div class="login-field"><label>Username</label>
+        <input type="text" id="loginUser" autocomplete="username" required autofocus></div>
+      <div class="login-field"><label>Password</label>
+        <input type="password" id="loginPass" autocomplete="current-password" required></div>
+      <button class="login-btn" type="submit" id="loginBtn">Sign in</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+    <div class="login-hint">First run default: <strong>admin</strong> / <strong>admin</strong> — change immediately.</div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="appView" class="app hidden">
+<header>
+  <div class="logo"><div class="logo-icon">P</div>PageIndex RAG<span class="badge">v2</span></div>
+  <div class="group-switcher">
+    <label>Workspace</label>
+    <select id="groupSelect" onchange="onGroupChange()"></select>
+  </div>
+  <div class="header-right">
+    <span class="llm-badge" id="llmBadge">Claude</span>
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-text" id="statusText">Connecting…</span>
+    <span class="user-chip"><span class="dot"></span><span id="userName">—</span></span>
+    <button class="icon-btn" id="adminBtn" onclick="openAdmin()" style="display:none">⚙ Admin</button>
+    <button class="icon-btn danger" onclick="doLogout()">Sign out</button>
+  </div>
+</header>
+
+<aside>
+  <div class="sidebar-header"><span>Documents</span><span class="count" id="docCount"></span></div>
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".pdf,.txt,.docx,.xlsx,.xls,.md,.csv" multiple>
+    <div class="upload-icon">⬆</div>
+    <div class="upload-label">Upload Document</div>
+    <div class="upload-hint">PDF · DOCX · XLSX · TXT · MD · CSV</div>
+    <div class="upload-target" id="uploadTarget"></div>
+  </div>
+  <div class="upload-progress" id="uploadProgress">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-label" id="progressLabel">Uploading…</div>
+  </div>
+  <div class="doc-list" id="docList">
+    <div class="empty-docs">No documents yet.<br>Upload any file to start.</div>
+  </div>
+</aside>
+
+<main>
+  <div class="chat-header">
+    <span style="font-size:18px;color:var(--accent)">◆</span>
+    <div style="flex:1">
+      <div class="chat-title" id="chatTitle">Ask across your workspace</div>
+      <div class="chat-sub" id="chatSub">The assistant auto-selects the most relevant documents.</div>
+    </div>
+  </div>
+  <div class="messages" id="messages">
+    <div class="msg ai"><div class="avatar ai">AI</div>
+      <div class="bubble">Ask anything — I'll route your question to the right documents in this workspace and answer with citations.</div>
+    </div>
+  </div>
+  <div class="input-area">
+    <div class="input-row">
+      <textarea id="question" rows="1" placeholder="Ask anything about this workspace…"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendQuery()">➤</button>
+    </div>
+    <div class="input-hint">Enter to send · Shift+Enter for new line</div>
+  </div>
+</main>
+</div>
+
+<!-- Admin modal -->
+<div id="adminModal" class="modal-backdrop hidden" onclick="if(event.target===this)closeAdmin()">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>⚙ Admin Panel</h3>
+      <button class="modal-close" onclick="closeAdmin()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-tab="users" onclick="switchTab('users')">Users</button>
+        <button class="admin-tab" data-tab="groups" onclick="switchTab('groups')">Workspaces</button>
+      </div>
+
+      <!-- Users tab -->
+      <div id="tab-users">
+        <h4 style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Create new user</h4>
+        <form class="admin-form" onsubmit="createUser(event)">
+          <div>
+            <label>Username</label>
+            <input type="text" id="newUsername" required pattern="[a-zA-Z0-9_.-]+" maxlength="32">
+          </div>
+          <div>
+            <label>Password</label>
+            <input type="password" id="newPassword" required minlength="6" maxlength="128">
+          </div>
+          <div class="full">
+            <label>Workspaces</label>
+            <div class="group-checks" id="newUserGroups"></div>
+          </div>
+          <div class="full" style="display:flex;align-items:center;gap:14px">
+            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);margin:0">
+              <input type="checkbox" id="newIsAdmin" style="accent-color:var(--accent)"> Grant admin privileges
+            </label>
+          </div>
+          <div class="full" style="display:flex;justify-content:flex-end">
+            <button type="submit" class="admin-btn" id="createUserBtn">Create user</button>
+          </div>
+          <div class="form-error" id="createUserError"></div>
+        </form>
+
+        <h4 style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:22px 0 10px">Existing users</h4>
+        <table class="users-table">
+          <thead><tr><th>Username</th><th>Workspaces</th><th>Role</th><th style="text-align:right">Actions</th></tr></thead>
+          <tbody id="usersTableBody"><tr><td colspan="4" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- Groups tab -->
+      <div id="tab-groups" class="hidden">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+          Workspaces are configured in <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--accent)">state/groups.json</code> on the server. Edit that file and restart the service to add or rename workspaces.
+        </p>
+        <div id="groupsList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit user modal -->
+<div id="editUserModal" class="modal-backdrop hidden" onclick="if(event.target===this)closeEditUser()">
+  <div class="modal" style="width:min(500px,92vw)">
+    <div class="modal-head"><h3>Edit user: <span id="editUsername"></span></h3>
+      <button class="modal-close" onclick="closeEditUser()">×</button></div>
+    <div class="modal-body">
+      <form class="admin-form" onsubmit="saveUserEdit(event)">
+        <div class="full"><label>Reset password (leave blank to keep)</label>
+          <input type="password" id="editPassword" minlength="6" maxlength="128" autocomplete="new-password"></div>
+        <div class="full"><label>Workspaces</label>
+          <div class="group-checks" id="editUserGroups"></div></div>
+        <div class="full"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);margin:0">
+          <input type="checkbox" id="editIsAdmin" style="accent-color:var(--accent)"> Admin privileges
+        </label></div>
+        <div class="full" style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" class="admin-btn ghost" onclick="closeEditUser()">Cancel</button>
+          <button type="submit" class="admin-btn">Save changes</button>
+        </div>
+        <div class="form-error" id="editUserError"></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '';
+let activeGroup = localStorage.getItem('pi_group') || null;
+let groups = [];
+let me = null;
+let pollTimers = {};
+let editingUser = null;
+
+const EXT_ICONS = {pdf:'📄',docx:'📝',doc:'📝',xlsx:'📊',xls:'📊',txt:'📃',md:'🗒',csv:'📋'};
+const extIcon = f => EXT_ICONS[(f||'').split('.').pop().toLowerCase()] || '📁';
+
+function toast(msg, type='info'){const el=document.getElementById('toast');el.textContent=msg;
+  el.className='show '+type;clearTimeout(el._t);el._t=setTimeout(()=>el.className='',4000);}
+function escapeHtml(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const groupHeaders = () => activeGroup ? {'X-Group': activeGroup} : {};
+
+async function api(method,path,body,onProgress){
+  if(method==='UPLOAD'){
+    return new Promise((res,rej)=>{
+      const xhr=new XMLHttpRequest();xhr.open('POST',API+path);xhr.withCredentials=true;
+      if(activeGroup)xhr.setRequestHeader('X-Group',activeGroup);
+      xhr.upload.onprogress=onProgress||(()=>{});
+      xhr.onload=()=>{try{res({status:xhr.status,body:JSON.parse(xhr.responseText)})}catch{rej(new Error('Parse error'))}};
+      xhr.onerror=()=>rej(new Error('Network error'));xhr.send(body);
+    });
+  }
+  const opts={method,headers:{...groupHeaders()},credentials:'include'};
+  if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
+  const r=await fetch(API+path,opts);
+  const js=await r.json().catch(()=>({}));
+  if(r.status===401){showLogin();throw new Error(js.error||'Authentication required');}
+  if(!r.ok) throw new Error(js.error||`HTTP ${r.status}`);
+  return js;
+}
+
+function showLogin(){me=null;document.getElementById('loginView').classList.remove('hidden');
+  document.getElementById('appView').classList.add('hidden');
+  setTimeout(()=>document.getElementById('loginUser')?.focus(),50);}
+function showApp(){document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('appView').classList.remove('hidden');}
+
+async function doLogin(ev){
+  ev.preventDefault();
+  const username=document.getElementById('loginUser').value.trim();
+  const password=document.getElementById('loginPass').value;
+  const btn=document.getElementById('loginBtn');
+  const err=document.getElementById('loginError');
+  err.textContent='';btn.disabled=true;btn.textContent='Signing in…';
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',credentials:'include',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const js=await r.json();
+    if(!r.ok) throw new Error(js.error||'Sign-in failed');
+    me=js;document.getElementById('loginPass').value='';
+    await bootApp();
+  }catch(e){err.textContent=e.message;}
+  finally{btn.disabled=false;btn.textContent='Sign in';}
+}
+
+async function doLogout(){
+  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch{}
+  activeGroup=null;localStorage.removeItem('pi_group');showLogin();
+}
+
+async function checkSession(){
+  try{
+    const r=await fetch('/api/auth/me',{credentials:'include'});
+    const js=await r.json();
+    if(js.authenticated){me=js;return true;}
+  }catch{}
+  return false;
+}
+
+async function bootApp(){
+  showApp();
+  document.getElementById('userName').textContent=me.username+(me.is_admin?' · admin':'');
+  document.getElementById('adminBtn').style.display=me.is_admin?'inline-flex':'none';
+  await loadGroups();await checkHealth();await refreshDocs();
+}
+
+async function loadGroups(){
+  groups=await api('GET','/api/groups');
+  const sel=document.getElementById('groupSelect');
+  sel.innerHTML=groups.map(g=>`<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
+  if(!activeGroup||!groups.find(g=>g.id===activeGroup))activeGroup=groups[0]?.id||null;
+  if(activeGroup){sel.value=activeGroup;localStorage.setItem('pi_group',activeGroup);}
+  updateGroupUI();
+}
+const activeGroupName=()=>groups.find(g=>g.id===activeGroup)?.name||activeGroup||'—';
+
+function updateGroupUI(){
+  document.getElementById('uploadTarget').textContent=activeGroup?`→ ${activeGroupName()}`:'';
+  document.getElementById('chatTitle').textContent=`Ask across ${activeGroupName()}`;
+  document.getElementById('chatSub').textContent=`Scoped to ${activeGroupName()} — the assistant auto-selects relevant docs.`;
+}
+function onGroupChange(){
+  activeGroup=document.getElementById('groupSelect').value;
+  localStorage.setItem('pi_group',activeGroup);updateGroupUI();clearChat();refreshDocs();
+}
+function clearChat(){
+  document.getElementById('messages').innerHTML=`<div class="msg ai"><div class="avatar ai">AI</div>
+    <div class="bubble">Switched to <strong>${escapeHtml(activeGroupName())}</strong>. Ask anything — I'll search only this workspace.</div></div>`;
+}
+
+async function checkHealth(){
+  try{
+    const r=await fetch('/health').then(x=>x.json());
+    if(r.status==='ok'){
+      document.getElementById('statusDot').className='status-dot ok';
+      document.getElementById('statusText').textContent='Online';
+      const b=document.getElementById('llmBadge');
+      b.textContent=r.llm_mode==='ollama'?`Ollama · ${r.model}`:`Claude · ${r.model}`;
+      b.className='llm-badge'+(r.llm_mode==='ollama'?' ollama':'');
+    }
+  }catch{document.getElementById('statusText').textContent='Offline';}
+}
+
+const uploadZone=document.getElementById('uploadZone');
+const fileInput=document.getElementById('fileInput');
+['dragenter','dragover'].forEach(e=>uploadZone.addEventListener(e,ev=>{ev.preventDefault();uploadZone.classList.add('drag');}));
+['dragleave','drop'].forEach(e=>uploadZone.addEventListener(e,ev=>{
+  ev.preventDefault();uploadZone.classList.remove('drag');
+  if(e==='drop'&&ev.dataTransfer.files.length)uploadFiles(ev.dataTransfer.files);
+}));
+fileInput.addEventListener('change',()=>{uploadFiles(fileInput.files);fileInput.value='';});
+const uploadFiles=files=>[...files].forEach(uploadFile);
+
+async function uploadFile(file){
+  const prog=document.getElementById('uploadProgress');
+  const fill=document.getElementById('progressFill');
+  const label=document.getElementById('progressLabel');
+  prog.style.display='block';fill.style.width='0%';
+  label.textContent=`Uploading ${file.name} → ${activeGroupName()}…`;
+  const fd=new FormData();fd.append('file',file);
+  try{
+    const r=await api('UPLOAD','/api/upload',fd,ev=>{
+      if(ev.lengthComputable){const pct=Math.round(ev.loaded/ev.total*100);
+        fill.style.width=pct+'%';label.textContent=`Uploading ${file.name}… ${pct}%`;}
+    });
+    if(r.status===401){showLogin();throw new Error('Not signed in');}
+    if(r.body?.error) throw new Error(r.body.error);
+    label.textContent=`Processing ${file.name}…`;fill.style.width='100%';
+    toast(`"${file.name}" uploaded — processing`,'success');
+    pollJob(r.body.job_id,file.name);await refreshDocs();
+    setTimeout(()=>prog.style.display='none',2500);
+  }catch(err){prog.style.display='none';toast(`Upload failed: ${err.message}`,'error');}
+}
+
+function pollJob(jobId,filename){
+  if(pollTimers[jobId])return;
+  pollTimers[jobId]=setInterval(async()=>{
+    try{
+      const j=await api('GET',`/api/jobs/${jobId}`);
+      if(j.status==='ready'){clearInterval(pollTimers[jobId]);delete pollTimers[jobId];
+        toast(`"${filename}" ready ✓`,'success');await refreshDocs();}
+      else if(j.status==='error'){clearInterval(pollTimers[jobId]);delete pollTimers[jobId];
+        toast(`Processing failed: ${j.error}`,'error');await refreshDocs();}
+      else await refreshDocs();
+    }catch{}
+  },3000);
+}
+
+async function refreshDocs(){
+  try{const docs=await api('GET','/api/documents');renderDocs(Array.isArray(docs)?docs:[]);}catch{}
+}
+function renderDocs(docs){
+  document.getElementById('docCount').textContent=docs.length?`${docs.length} doc${docs.length>1?'s':''}`:'';
+  const el=document.getElementById('docList');
+  if(!docs.length){el.innerHTML=`<div class="empty-docs">No documents in <strong>${escapeHtml(activeGroupName())}</strong> yet.<br>Upload any file to start.</div>`;return;}
+  el.innerHTML=docs.map(d=>`
+    <div class="doc-item" title="${escapeHtml(d.summary||d.filename)}">
+      <span class="doc-icon">${extIcon(d.filename)}</span>
+      <div class="doc-info">
+        <div class="doc-name">${escapeHtml(d.filename)}</div>
+        <div class="doc-meta"><span class="doc-status ${d.status}">${d.status}</span><span class="doc-size">${d.size_mb} MB</span></div>
+      </div>
+      <button class="doc-del" onclick="deleteDoc(event,'${escapeHtml(d.doc_id)}')" title="Delete">✕</button>
+    </div>`).join('');
+  docs.filter(d=>d.status==='queued'||d.status==='indexing').forEach(d=>pollJob(d.job_id,d.filename));
+}
+async function deleteDoc(ev,docId){
+  ev.stopPropagation();if(!confirm('Delete this document?'))return;
+  await api('DELETE',`/api/documents/${docId}`);toast('Deleted','success');await refreshDocs();
+}
+
+function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendQuery();}}
+const autoResize=el=>{el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';};
+
+function appendMsg(role,content,payload){
+  const container=document.getElementById('messages');if(!container)return;
+  const div=document.createElement('div');div.className=`msg ${role}`;
+  const html=escapeHtml(content).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+  let banner='',srcHtml='';
+  if(payload&&role==='ai'){
+    if(payload.routed_docs?.length){
+      banner=`<div class="routed-banner"><span>Routed to</span>
+        <span class="pill accent">${payload.routed_docs.length} doc${payload.routed_docs.length>1?'s':''}</span>
+        <span>in</span><span class="pill">${escapeHtml(activeGroupName())}</span></div>`;
+    }
+    if(payload.sources?.length){
+      const items=payload.sources.map(s=>{
+        const secs=(s.sections||[]).map(x=>`
+          <div class="source-item"><div class="source-title">${escapeHtml(x.title||'Section')}${x.page_range?` · p.${escapeHtml(String(x.page_range))}`:''}</div>
+          <div class="source-why">${escapeHtml(x.relevance||'')}</div></div>`).join('')
+          ||`<div class="source-item"><div class="source-why">Whole document consulted</div></div>`;
+        return `<div class="source-group"><div class="source-doc">${extIcon(s.filename)} ${escapeHtml(s.filename)}</div>${secs}</div>`;
+      }).join('');
+      srcHtml=`<div class="sources"><button class="sources-toggle" onclick="toggleSources(this)">▶ ${payload.sources.length} source${payload.sources.length>1?'s':''}</button>
+        <div class="sources-list">${items}</div></div>`;
+    }
+  }
+  const avatar=role==='ai'?'<div class="avatar ai">AI</div>':'<div class="avatar user">U</div>';
+  div.innerHTML=role==='ai'?`${avatar}<div class="bubble">${banner}${html}${srcHtml}</div>`
+    :`${avatar}<div class="bubble">${html}</div>`;
+  container.appendChild(div);container.scrollTop=container.scrollHeight;
+}
+function toggleSources(btn){const list=btn.nextElementSibling;
+  const open=list.classList.toggle('open');
+  btn.textContent=btn.textContent.replace(open?'▶':'▼',open?'▼':'▶');}
+function showTyping(){const c=document.getElementById('messages');if(!c)return null;
+  const div=document.createElement('div');div.className='msg ai';div.id='typing-indicator';
+  div.innerHTML=`<div class="avatar ai">AI</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  c.appendChild(div);c.scrollTop=c.scrollHeight;return div;}
+
+async function sendQuery(){
+  const input=document.getElementById('question');const btn=document.getElementById('sendBtn');
+  const q=input?.value.trim();if(!q)return;
+  appendMsg('user',q);input.value='';input.style.height='auto';
+  btn.disabled=true;input.disabled=true;
+  const typing=showTyping();
+  try{
+    const r=await api('POST','/api/query',{question:q});
+    typing?.remove();if(r.error)throw new Error(r.error);
+    appendMsg('ai',r.answer,r);
+  }catch(err){typing?.remove();appendMsg('ai',`Error: ${err.message}`);toast(err.message,'error');}
+  finally{btn.disabled=false;input.disabled=false;input.focus();}
+}
+
+// ── Admin panel ──────────────────────────────────────────────────────────
+async function openAdmin(){
+  if(!me?.is_admin)return;
+  document.getElementById('adminModal').classList.remove('hidden');
+  renderGroupChecks('newUserGroups',[]);
+  renderGroupsList();
+  await loadUsersTable();
+}
+function closeAdmin(){document.getElementById('adminModal').classList.add('hidden');}
+function switchTab(name){
+  document.querySelectorAll('.admin-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
+  document.getElementById('tab-users').classList.toggle('hidden',name!=='users');
+  document.getElementById('tab-groups').classList.toggle('hidden',name!=='groups');
+}
+function renderGroupChecks(containerId,selected){
+  const el=document.getElementById(containerId);
+  el.innerHTML=groups.map(g=>`
+    <label class="group-check">
+      <input type="checkbox" value="${escapeHtml(g.id)}" ${selected.includes(g.id)?'checked':''}>
+      ${escapeHtml(g.name)}
+    </label>`).join('') || '<span style="color:var(--text3);font-size:12px">No workspaces configured</span>';
+}
+function readGroupChecks(containerId){
+  return [...document.querySelectorAll(`#${containerId} input:checked`)].map(i=>i.value);
+}
+function renderGroupsList(){
+  document.getElementById('groupsList').innerHTML=groups.map(g=>`
+    <div style="padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+      <div style="font-weight:600;margin-bottom:3px">${escapeHtml(g.name)} <span style="color:var(--text3);font-weight:400;font-size:12px">· ${escapeHtml(g.id)}</span></div>
+      <div style="font-size:12px;color:var(--text2)">${escapeHtml(g.description||'')}</div>
+    </div>`).join('') || '<div style="color:var(--text3)">No workspaces configured</div>';
+}
+async function loadUsersTable(){
+  try{
+    const users=await api('GET','/api/admin/users');
+    const body=document.getElementById('usersTableBody');
+    if(!users.length){body.innerHTML='<tr><td colspan="4" style="color:var(--text3);text-align:center;padding:20px">No users</td></tr>';return;}
+    body.innerHTML=users.map(u=>{
+      const chips=(u.groups||[]).map(gid=>{
+        const name=groups.find(g=>g.id===gid)?.name||gid;
+        return `<span class="gchip">${escapeHtml(name)}</span>`;
+      }).join('') || '<span style="color:var(--text3);font-size:11px">—</span>';
+      return `<tr>
+        <td><strong>${escapeHtml(u.username)}</strong></td>
+        <td><div class="user-groups-cell">${chips}</div></td>
+        <td>${u.is_admin?'<span class="gchip admin">ADMIN</span>':'<span style="color:var(--text3);font-size:11px">user</span>'}</td>
+        <td class="actions-cell">
+          <button class="admin-btn ghost" onclick="openEditUser('${escapeHtml(u.username)}')">Edit</button>
+          ${u.username===me.username?'':`<button class="admin-btn danger" onclick="deleteUser('${escapeHtml(u.username)}')">Delete</button>`}
+        </td></tr>`;
+    }).join('');
+  }catch(e){
+    document.getElementById('usersTableBody').innerHTML=`<tr><td colspan="4" style="color:var(--red)">Failed: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+async function createUser(ev){
+  ev.preventDefault();
+  const btn=document.getElementById('createUserBtn');
+  const err=document.getElementById('createUserError');
+  err.textContent='';err.style.color='var(--red)';
+  const username=document.getElementById('newUsername').value.trim();
+  const password=document.getElementById('newPassword').value;
+  const userGroups=readGroupChecks('newUserGroups');
+  const is_admin=document.getElementById('newIsAdmin').checked;
+  if(!userGroups.length && !is_admin){err.textContent='Assign at least one workspace or grant admin.';return;}
+  btn.disabled=true;btn.textContent='Creating…';
+  try{
+    await api('POST','/api/admin/users',{username,password,groups:userGroups,is_admin});
+    err.style.color='var(--green)';err.textContent=`User "${username}" created.`;
+    document.getElementById('newUsername').value='';
+    document.getElementById('newPassword').value='';
+    document.getElementById('newIsAdmin').checked=false;
+    renderGroupChecks('newUserGroups',[]);
+    await loadUsersTable();
+    toast(`User "${username}" created`,'success');
+  }catch(e){err.textContent=e.message;}
+  finally{btn.disabled=false;btn.textContent='Create user';}
+}
+async function openEditUser(username){
+  editingUser=username;
+  document.getElementById('editUsername').textContent=username;
+  const users=await api('GET','/api/admin/users');
+  const u=users.find(x=>x.username===username);
+  if(!u)return toast('User not found','error');
+  document.getElementById('editPassword').value='';
+  document.getElementById('editIsAdmin').checked=!!u.is_admin;
+  renderGroupChecks('editUserGroups',u.groups||[]);
+  document.getElementById('editUserError').textContent='';
+  document.getElementById('editUserModal').classList.remove('hidden');
+}
+function closeEditUser(){document.getElementById('editUserModal').classList.add('hidden');editingUser=null;}
+async function saveUserEdit(ev){
+  ev.preventDefault();
+  if(!editingUser)return;
+  const err=document.getElementById('editUserError');err.textContent='';
+  const body={groups:readGroupChecks('editUserGroups'),
+    is_admin:document.getElementById('editIsAdmin').checked};
+  const pw=document.getElementById('editPassword').value;
+  if(pw) body.password=pw;
+  try{
+    await api('PATCH',`/api/admin/users/${encodeURIComponent(editingUser)}`,body);
+    toast(`User "${editingUser}" updated`,'success');
+    closeEditUser();await loadUsersTable();
+  }catch(e){err.textContent=e.message;}
+}
+async function deleteUser(username){
+  if(!confirm(`Delete user "${username}"? This cannot be undone.`))return;
+  try{
+    await api('DELETE',`/api/admin/users/${encodeURIComponent(username)}`);
+    toast(`User "${username}" deleted`,'success');await loadUsersTable();
+  }catch(e){toast(e.message,'error');}
+}
+
+(async function init(){
+  if(await checkSession())await bootApp();
+  else showLogin();
+  setInterval(checkHealth,30000);
+  setInterval(()=>{if(me)refreshDocs();},8000);
+})();
+</script>
+</body>
+</html>
