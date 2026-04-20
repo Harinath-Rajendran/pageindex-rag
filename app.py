@@ -1,7 +1,7 @@
 """
-PageIndex RAG v2 - Enterprise Backend
+DocuMind - Enterprise Document Intelligence
 - Multi-format: PDF, TXT, DOCX, XLSX, MD, CSV
-- LLM: Claude (via LiteLLM) or Ollama (direct)
+- LLM: Claude (via LiteLLM), OpenAI, Grok, or Ollama (direct)
 - File-based persistence (multi-worker safe)
 - Groups + flask-login auth + per-format retrieval tuning
 """
@@ -125,6 +125,7 @@ def resolve_group(req):
     return None
 
 # ── LLM mode ──────────────────────────────────────────────────────────────
+# Supported: "claude" (via LiteLLM), "openai", "grok", "ollama"
 LLM_MODE = os.environ.get("LLM_MODE", "claude")
 
 # ── File-based persistence ─────────────────────────────────────────────────
@@ -369,8 +370,14 @@ def get_doc_text(doc_id: str, ext: str, max_chars: int = None) -> str:
 # ── LLM client ────────────────────────────────────────────────────────────
 def chat(messages, temperature=0.1, max_tokens=1500) -> str:
     mode = os.environ.get("LLM_MODE", "claude")
-    return _chat_ollama(messages, temperature, max_tokens) if mode == "ollama" \
-           else _chat_claude(messages, temperature, max_tokens)
+    if mode == "ollama":
+        return _chat_ollama(messages, temperature, max_tokens)
+    elif mode == "openai":
+        return _chat_openai(messages, temperature, max_tokens)
+    elif mode == "grok":
+        return _chat_grok(messages, temperature, max_tokens)
+    else:
+        return _chat_claude(messages, temperature, max_tokens)
 
 def _chat_claude(messages, temperature, max_tokens) -> str:
     from openai import OpenAI
@@ -379,6 +386,29 @@ def _chat_claude(messages, temperature, max_tokens) -> str:
         api_key=os.environ.get("LITELLM_API_KEY", "sk-placeholder"),
     )
     model = os.environ.get("QUERY_MODEL", "claude-sonnet")
+    r = client.chat.completions.create(
+        model=model, messages=messages,
+        temperature=temperature, max_tokens=max_tokens,
+    )
+    return r.choices[0].message.content
+
+def _chat_openai(messages, temperature, max_tokens) -> str:
+    from openai import OpenAI
+    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+    model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+    r = client.chat.completions.create(
+        model=model, messages=messages,
+        temperature=temperature, max_tokens=max_tokens,
+    )
+    return r.choices[0].message.content
+
+def _chat_grok(messages, temperature, max_tokens) -> str:
+    from openai import OpenAI
+    client = OpenAI(
+        base_url="https://api.x.ai/v1",
+        api_key=os.environ.get("GROK_API_KEY", ""),
+    )
+    model = os.environ.get("GROK_MODEL", "grok-3-mini")
     r = client.chat.completions.create(
         model=model, messages=messages,
         temperature=temperature, max_tokens=max_tokens,
@@ -817,8 +847,14 @@ def admin_delete_user(username):
 @app.get("/health")
 def health():
     mode  = os.environ.get("LLM_MODE", "claude")
-    model = os.environ.get("OLLAMA_MODEL", "gemma3:4b") if mode == "ollama" \
-            else os.environ.get("QUERY_MODEL", "claude-sonnet")
+    if mode == "ollama":
+        model = os.environ.get("OLLAMA_MODEL", "gemma3:4b")
+    elif mode == "openai":
+        model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+    elif mode == "grok":
+        model = os.environ.get("GROK_MODEL", "grok-3-mini")
+    else:
+        model = os.environ.get("QUERY_MODEL", "claude-sonnet")
     return jsonify({"status": "ok", "llm_mode": mode, "model": model,
                     "timestamp": datetime.utcnow().isoformat()})
 
@@ -1074,14 +1110,8 @@ def delete_chat(chat_id):
     return jsonify({"deleted": chat_id})
 
 # ── Streaming query (SSE) ──────────────────────────────────────────────────
-def _chat_claude_stream(messages, temperature, max_tokens):
-    """Yield text chunks from LiteLLM/OpenAI streaming API."""
-    from openai import OpenAI
-    client = OpenAI(
-        base_url=os.environ.get("LITELLM_BASE_URL", "http://localhost:4000"),
-        api_key=os.environ.get("LITELLM_API_KEY", "sk-placeholder"),
-    )
-    model = os.environ.get("QUERY_MODEL", "claude-sonnet")
+def _openai_compat_stream(client, model, messages, temperature, max_tokens):
+    """Yield text chunks from any OpenAI-compatible streaming API."""
     stream = client.chat.completions.create(
         model=model, messages=messages,
         temperature=temperature, max_tokens=max_tokens, stream=True,
@@ -1091,8 +1121,29 @@ def _chat_claude_stream(messages, temperature, max_tokens):
         if delta:
             yield delta
 
+def _chat_claude_stream(messages, temperature, max_tokens):
+    from openai import OpenAI
+    client = OpenAI(
+        base_url=os.environ.get("LITELLM_BASE_URL", "http://localhost:4000"),
+        api_key=os.environ.get("LITELLM_API_KEY", "sk-placeholder"),
+    )
+    yield from _openai_compat_stream(client, os.environ.get("QUERY_MODEL", "claude-sonnet"),
+                                     messages, temperature, max_tokens)
+
+def _chat_openai_stream(messages, temperature, max_tokens):
+    from openai import OpenAI
+    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+    yield from _openai_compat_stream(client, os.environ.get("OPENAI_MODEL", "gpt-4o"),
+                                     messages, temperature, max_tokens)
+
+def _chat_grok_stream(messages, temperature, max_tokens):
+    from openai import OpenAI
+    client = OpenAI(base_url="https://api.x.ai/v1",
+                    api_key=os.environ.get("GROK_API_KEY", ""))
+    yield from _openai_compat_stream(client, os.environ.get("GROK_MODEL", "grok-3-mini"),
+                                     messages, temperature, max_tokens)
+
 def _chat_ollama_stream(messages, temperature, max_tokens):
-    """Yield text chunks from Ollama streaming API."""
     import urllib.request
     url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     mdl = os.environ.get("OLLAMA_MODEL", "gemma3:4b")
@@ -1153,9 +1204,10 @@ def query_stream():
                 log.warning(f"Retrieval failed for {futures[fut]}: {e}")
 
     if not retrievals:
+        _no_text_msg = "Couldn't extract usable text from the routed documents."
         def _no_text():
             yield f"data: {json.dumps({'type':'meta','routed_docs':candidates,'sources':[],'group':group,'question':question})}\n\n"
-            yield f"data: {json.dumps({'type':'token','text':'Couldn\\'t extract usable text from the routed documents.'})}\n\n"
+            yield f"data: {json.dumps({'type':'token','text':_no_text_msg})}\n\n"
             yield "data: {\"type\":\"done\"}\n\n"
         return Response(stream_with_context(_no_text()), content_type="text/event-stream",
                         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -1179,8 +1231,14 @@ Instructions:
 """
 
     mode = os.environ.get("LLM_MODE", "claude")
-    model_label = (os.environ.get("OLLAMA_MODEL", "gemma3:4b") if mode == "ollama"
-                   else os.environ.get("QUERY_MODEL", "claude-sonnet"))
+    if mode == "ollama":
+        model_label = os.environ.get("OLLAMA_MODEL", "gemma3:4b")
+    elif mode == "openai":
+        model_label = os.environ.get("OPENAI_MODEL", "gpt-4o")
+    elif mode == "grok":
+        model_label = os.environ.get("GROK_MODEL", "grok-3-mini")
+    else:
+        model_label = os.environ.get("QUERY_MODEL", "claude-sonnet")
 
     sources_out = [{"doc_id": r["doc_id"], "filename": r["filename"],
                     "sections": r["sections"]} for r in retrievals]
@@ -1199,7 +1257,14 @@ Instructions:
         yield f"data: {meta}\n\n"
 
         try:
-            stream_fn = _chat_ollama_stream if mode == "ollama" else _chat_claude_stream
+            if mode == "ollama":
+                stream_fn = _chat_ollama_stream
+            elif mode == "openai":
+                stream_fn = _chat_openai_stream
+            elif mode == "grok":
+                stream_fn = _chat_grok_stream
+            else:
+                stream_fn = _chat_claude_stream
             for chunk in stream_fn(
                 [{"role": "user", "content": synthesis_prompt}], 0.1, 1800
             ):
