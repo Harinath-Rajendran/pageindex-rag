@@ -603,7 +603,10 @@ async function bootApp(){
   showApp();
   document.getElementById('userName').textContent=me.username+(me.is_admin?' · admin':'');
   document.getElementById('adminBtn').style.display=me.is_admin?'inline-flex':'none';
-  await loadGroups();await checkHealth();await refreshDocs();
+  document.getElementById('uploadZone').style.display=me.is_admin?'':'none';
+  await loadGroups();await checkHealth();
+  if(me.is_admin) await refreshDocs();
+  else renderDocsReadonly();
 }
 
 async function loadGroups(){
@@ -623,7 +626,8 @@ function updateGroupUI(){
 }
 function onGroupChange(){
   activeGroup=document.getElementById('groupSelect').value;
-  localStorage.setItem('pi_group',activeGroup);updateGroupUI();clearChat();refreshDocs();
+  localStorage.setItem('pi_group',activeGroup);updateGroupUI();clearChat();
+  if(me?.is_admin) refreshDocs(); else renderDocsReadonly();
 }
 function clearChat(){
   document.getElementById('messages').innerHTML=`<div class="msg ai"><div class="avatar ai">AI</div>
@@ -690,7 +694,12 @@ function pollJob(jobId,filename){
   },3000);
 }
 
+function renderDocsReadonly(){
+  document.getElementById('docCount').textContent='';
+  document.getElementById('docList').innerHTML=`<div class="empty-docs" style="padding:20px 12px">Documents are managed by admins.<br>Use the chat to query this workspace.</div>`;
+}
 async function refreshDocs(){
+  if(!me?.is_admin){renderDocsReadonly();return;}
   try{const docs=await api('GET','/api/documents');renderDocs(Array.isArray(docs)?docs:[]);}catch{}
 }
 function renderDocs(docs){
@@ -704,7 +713,7 @@ function renderDocs(docs){
         <div class="doc-name">${escapeHtml(d.filename)}</div>
         <div class="doc-meta"><span class="doc-status ${d.status}">${d.status}</span><span class="doc-size">${d.size_mb} MB</span></div>
       </div>
-      <button class="doc-del" onclick="deleteDoc(event,'${escapeHtml(d.doc_id)}')" title="Delete">✕</button>
+      ${me?.is_admin?`<button class="doc-del" onclick="deleteDoc(event,'${escapeHtml(d.doc_id)}')" title="Delete">✕</button>`:''}
     </div>`).join('');
   docs.filter(d=>d.status==='queued'||d.status==='indexing').forEach(d=>pollJob(d.job_id,d.filename));
 }
@@ -886,7 +895,7 @@ function closeAbout(){document.getElementById('aboutModal').classList.add('hidde
   if(await checkSession())await bootApp();
   else showLogin();
   setInterval(checkHealth,30000);
-  setInterval(()=>{if(me)refreshDocs();},8000);
+  setInterval(()=>{if(me?.is_admin)refreshDocs();},8000);
 })();
 </script>
 </body>

@@ -553,9 +553,16 @@ def _run_pageindex_tree(file_path: Path, job_id: str, doc_id: str):
 
 # ── Router ─────────────────────────────────────────────────────────────────
 def route_docs(question: str, group: str, top_k: int = 5) -> list:
-    docs = [d for d in all_docs(group=group)
+    all_group_docs = all_docs(group=group)
+    docs = [d for d in all_group_docs
             if (load_job(d["job_id"]) or {}).get("status") == "ready"]
-    if not docs: return []
+    log.info(f"[route_docs] group={group!r} total={len(all_group_docs)} ready={len(docs)}")
+    if not docs:
+        # Log all existing doc groups to diagnose mismatches
+        all_existing = [(d.get("group"), d.get("filename"), (load_job(d["job_id"]) or {}).get("status"))
+                        for d in all_docs()]
+        log.warning(f"[route_docs] No ready docs in group={group!r}. All docs in state: {all_existing}")
+        return []
     if len(docs) <= top_k:
         return [d["doc_id"] for d in docs]
 
@@ -937,10 +944,10 @@ def list_documents():
 @app.delete("/api/documents/<doc_id>")
 @api_login_required
 def delete_document(doc_id):
+    if not current_user.is_admin:
+        return jsonify({"error": "Admin privileges required to delete documents"}), 403
     doc = load_doc(doc_id)
     if not doc: return jsonify({"error": "Not found"}), 404
-    if not current_user.is_admin and doc.get("group") not in current_user.groups:
-        return jsonify({"error": "Forbidden"}), 403
 
     ext = doc.get("ext", "pdf")
     (UPLOAD_DIR / f"{doc_id}.{ext}").unlink(missing_ok=True)
